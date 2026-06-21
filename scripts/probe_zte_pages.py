@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 import sys
 
-from aiohttp import ClientSession
+from aiohttp import ClientSession, CookieJar
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -37,7 +37,7 @@ async def _run(args: argparse.Namespace) -> None:
     if not password:
         password = getpass("Router password: ")
 
-    async with ClientSession() as session:
+    async with ClientSession(cookie_jar=CookieJar(unsafe=True)) as session:
         client = ZteWifiClient(
             session=session,
             host=args.host,

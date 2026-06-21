@@ -16,12 +16,17 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 from xml.etree import ElementTree
 
 from aiohttp import ClientError, ClientSession
+from yarl import URL
 
 _LOGIN_TOKEN_PATH = "/function_module/login_module/login_page/logintoken_lua.lua"
 _WLAN_PAGE_PATH = (
     "/getpage.lua?pid=123&nextpage=Localnet_WlanBasicUser_t.lp&Menu3Location=0"
 )
+_LOCALNET_STATUS_PAGE_PATH = (
+    "/getpage.lua?pid=123&nextpage=Localnet_LocalnetStatusUser_t.lp&Menu3Location=0"
+)
 _WLAN_AP_PATH = "/common_page/Localnet_WlanBasicAd_WLANSSIDConf_lua.lua"
+_WLAN_STATUS_PATH = "/common_page/wlanStatus_lua.lua"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,6 +76,21 @@ class _ResponseData:
     set_cookie_headers: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class ZteWifiNetwork:
+    """Parsed status for one ZTE WLAN AP instance."""
+
+    instance_id: str
+    enabled: bool | None
+    essid: str | None
+    alias: str | None
+    wlan_view_name: str | None
+    band: str | None
+    bssid: str | None
+    channel_in_used: str | None
+    beacon_type: str | None
+
+
 @dataclass(slots=True)
 class ZteWifiClient:
     """Client for toggling a ZTE WLAN AP instance."""
@@ -84,7 +104,6 @@ class ZteWifiClient:
     dump_dir: Path | None = None
     diagnostics: bool = False
 
-    _cookies: dict[str, str] = field(default_factory=dict)
     _dump_count: int = 0
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -92,6 +111,14 @@ class ZteWifiClient:
         """Set the WLAN AP enabled flag."""
         async with self._lock:
             await self._set_enabled(enabled)
+
+    async def get_wifi_networks(self) -> list[ZteWifiNetwork]:
+        """Log in and fetch the current status for every WLAN AP instance."""
+        async with self._lock:
+            await self._login()
+            await self._get(self._cache_busted(_LOCALNET_STATUS_PAGE_PATH))
+            text = await self._get(self._cache_busted(_WLAN_STATUS_PATH))
+            return self._parse_wlan_status(text)
 
     async def _set_enabled(self, enabled: bool) -> None:
         await self._login()
@@ -116,7 +143,7 @@ class ZteWifiClient:
             )
 
     async def _login(self) -> None:
-        self._cookies = {"_TESTCOOKIESUPPORT": "1"}
+        self.session.cookie_jar.clear()
         text = await self._get("/")
         login_form_token = self._extract_login_form_token(text)
         if not login_form_token:
@@ -133,17 +160,18 @@ class ZteWifiClient:
             "_sessionTOKEN": login_form_token,
         }
         await self._post("/", payload, _LOGIN_HEADERS, allow_redirects=False)
-        if "SID" not in self._cookies:
+        if "SID" not in self.session.cookie_jar.filter_cookies(URL(self._url("/"))):
             raise ZteRouterError("Router login did not return a SID cookie")
 
     async def _get(self, path: str) -> str:
-        request_headers = self._headers_with_cookies(_BROWSER_HEADERS)
+        request_headers = self._request_headers(_BROWSER_HEADERS)
         response = await self._request(
             "GET",
             path,
             request_headers,
         )
         return response.text
+
 
     async def _post(
         self,
@@ -152,7 +180,7 @@ class ZteWifiClient:
         headers: Mapping[str, str],
         allow_redirects: bool = False,
     ) -> str:
-        request_headers = self._headers_with_cookies(headers)
+        request_headers = self._request_headers(headers)
         _LOGGER.debug("POST %s payload=%s", path, self._redact_payload(payload))
         response = await self._request(
             "POST",
@@ -178,10 +206,12 @@ class ZteWifiClient:
         payload: Mapping[str, Any] | None = None,
         allow_redirects: bool = True,
     ) -> _ResponseData:
+        url = self._url(path)
+        request_cookies = self._request_cookie_header(url)
         try:
             async with self.session.request(
                 method,
-                self._url(path),
+                url,
                 data=payload,
                 headers=headers,
                 allow_redirects=allow_redirects,
@@ -196,11 +226,11 @@ class ZteWifiClient:
         except ClientError as err:
             raise ZteRouterError(f"Router {method} failed: {err}") from err
 
-        self._store_cookies(response_data.set_cookie_headers)
         self._print_diagnostics(
             method,
             path,
             headers,
+            request_cookies,
             response_data.status,
             response_data.text,
             location=response_data.location,
@@ -235,17 +265,16 @@ class ZteWifiClient:
     def _hash_password(password: str, login_token: str) -> str:
         return sha256(f"{password}{login_token}".encode()).hexdigest()
 
-    def _headers_with_cookies(self, headers: Mapping[str, str]) -> dict[str, str]:
+    def _request_headers(self, headers: Mapping[str, str]) -> dict[str, str]:
         merged = dict(headers)
         merged.setdefault("referer", self.host.rstrip("/") + "/")
-        self._cookies.setdefault("_TESTCOOKIESUPPORT", "1")
-        merged["Cookie"] = "; ".join(
-            f"{name}={value}"
-            for name, value in sorted(
-                self._cookies.items(), key=lambda item: item[0].lower()
-            )
-        )
         return merged
+
+    def _request_cookie_header(self, url: str) -> str:
+        cookies = self.session.cookie_jar.filter_cookies(URL(url))
+        if not cookies:
+            return ""
+        return cookies.output(header="", sep=";").strip()
 
     def _build_apply_payload(
         self,
@@ -261,21 +290,95 @@ class ZteWifiClient:
             "_sessionTOKEN": session_token,
         }
 
-    def _store_cookies(self, values: list[str]) -> None:
-        for value in values:
-            _LOGGER.debug("Router Set-Cookie: %s", value)
-            cookie = SimpleCookie(value)
-            for key, morsel in cookie.items():
-                self._cookies[key] = morsel.value
-        self._cookies.setdefault("_TESTCOOKIESUPPORT", "1")
-        if values:
-            _LOGGER.debug("Stored router cookies: %s", sorted(self._cookies))
+    @classmethod
+    def _parse_wlan_status(cls, text: str) -> list[ZteWifiNetwork]:
+        try:
+            root = ElementTree.fromstring(text)
+        except ElementTree.ParseError as err:
+            raise ZteRouterError("Could not parse WLAN status response") from err
+
+        error = root.findtext(".//IF_ERRORSTR")
+        if error and error.strip().upper() != "SUCC":
+            raise ZteRouterError(f"Router returned WLAN status error: {error.strip()}")
+
+        aps = cls._parse_parameter_instances(root, "OBJ_WLANAP_ID")
+        drivers = {
+            instance["_InstID"]: instance
+            for instance in cls._parse_parameter_instances(
+                root,
+                "OBJ_WLANCONFIGDRV_ID",
+            )
+            if "_InstID" in instance
+        }
+        settings = {
+            instance["_InstID"]: instance
+            for instance in cls._parse_parameter_instances(
+                root,
+                "OBJ_WLANSETTING_ID",
+            )
+            if "_InstID" in instance
+        }
+
+        networks: list[ZteWifiNetwork] = []
+        for ap in aps:
+            instance_id = ap.get("_InstID")
+            if not instance_id:
+                continue
+
+            driver = drivers.get(instance_id, {})
+            wlan_view_name = ap.get("WLANViewName") or driver.get("WLANViewName")
+            setting = settings.get(wlan_view_name or "", {})
+            enabled = cls._parse_enabled(ap.get("Enable"))
+
+            networks.append(
+                ZteWifiNetwork(
+                    instance_id=instance_id,
+                    enabled=enabled,
+                    essid=ap.get("ESSID"),
+                    alias=ap.get("Alias"),
+                    wlan_view_name=wlan_view_name,
+                    band=setting.get("Band"),
+                    bssid=driver.get("Bssid"),
+                    channel_in_used=driver.get("ChannelInUsed"),
+                    beacon_type=ap.get("BeaconType"),
+                )
+            )
+
+        return networks
+
+    @staticmethod
+    def _parse_parameter_instances(
+        root: ElementTree.Element,
+        section_name: str,
+    ) -> list[dict[str, str]]:
+        instances: list[dict[str, str]] = []
+        for instance in root.findall(f".//{section_name}/Instance"):
+            parsed: dict[str, str] = {}
+            current_name: str | None = None
+            for child in instance:
+                text = (child.text or "").strip()
+                if child.tag == "ParaName":
+                    current_name = text
+                elif child.tag == "ParaValue" and current_name:
+                    parsed[current_name] = text
+                    current_name = None
+            instances.append(parsed)
+        return instances
+
+    @staticmethod
+    def _parse_enabled(value: str | None) -> bool | None:
+        if value == "1":
+            return True
+        if value == "0":
+            return False
+        return None
 
     def _print_diagnostics(
         self,
         method: str,
         path: str,
         request_headers: Mapping[str, str],
+        request_cookies: str,
         status: int,
         text: str,
         location: str | None = None,
@@ -288,6 +391,7 @@ class ZteWifiClient:
         print("request_headers:")
         for key, value in request_headers.items():
             print(f"  {key}: {value}")
+        print(f"request_cookies: {request_cookies or '<none>'}")
         print(f"response_code: {status}")
         print("parsed_response:")
         for key, value in self._parse_response_parts(

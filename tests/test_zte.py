@@ -1,11 +1,18 @@
 """Tests for the ZTE router client."""
 
 from collections.abc import Mapping
+from http.cookies import SimpleCookie
 import unittest
 from unittest.mock import patch
 from typing import Any
 
+from aiohttp import CookieJar
 from custom_components.zte_wifi.zte import ZteWifiClient
+from yarl import URL
+
+
+def _cookie_pairs(header: str) -> set[str]:
+    return set(header.split("; "))
 
 
 class FakeHeaders(dict[str, str]):
@@ -38,10 +45,21 @@ class FakeResponse:
 class FakeRequestContext:
     """Async context manager returned by the fake session."""
 
-    def __init__(self, response: FakeResponse) -> None:
+    def __init__(
+        self,
+        response: FakeResponse,
+        cookie_jar: CookieJar,
+        url: str,
+    ) -> None:
         self._response = response
+        self._cookie_jar = cookie_jar
+        self._url = URL(url)
 
     async def __aenter__(self) -> FakeResponse:
+        for value in self._response.headers.getall("Set-Cookie", []):
+            self._cookie_jar.update_cookies(
+                SimpleCookie(value), response_url=self._url
+            )
         return self._response
 
     async def __aexit__(self, *args: object) -> None:
@@ -53,11 +71,17 @@ class FakeSession:
 
     def __init__(self, responses: list[FakeResponse]) -> None:
         self._responses = responses
+        self.cookie_jar = CookieJar(unsafe=True)
         self.calls: list[dict[str, Any]] = []
 
     def request(self, method: str, url: str, **kwargs: Any) -> FakeRequestContext:
+        headers = dict(kwargs.get("headers") or {})
+        cookies = self.cookie_jar.filter_cookies(URL(url))
+        if cookies:
+            headers["Cookie"] = cookies.output(header="", sep=";").strip()
+        kwargs["headers"] = headers
         self.calls.append({"method": method, "url": url, **kwargs})
-        return FakeRequestContext(self._responses.pop(0))
+        return FakeRequestContext(self._responses.pop(0), self.cookie_jar, url)
 
 
 class ZteWifiClientTest(unittest.TestCase):
@@ -142,17 +166,61 @@ class ZteWifiClientTest(unittest.TestCase):
 
         self.assertTrue(ZteWifiClient._is_login_page(text))
 
-    def test_headers_include_cookies_in_stable_order(self) -> None:
-        """Send cookies in their stored order."""
-        self.client._cookies["SID"] = "sid-value"
-        self.client._cookies["Other"] = "other-value"
+    def test_parse_wlan_status_joins_ap_driver_and_band_instances(self) -> None:
+        """Parse the router's alternating ParaName/ParaValue WLAN status XML."""
+        text = """
+        <ajax_response_xml_root>
+            <IF_ERRORSTR>SUCC</IF_ERRORSTR>
+            <OBJ_WLANAP_ID>
+                <Instance>
+                    <ParaName>_InstID</ParaName>
+                    <ParaValue>DEV.WIFI.AP1</ParaValue>
+                    <ParaName>Enable</ParaName>
+                    <ParaValue>1</ParaValue>
+                    <ParaName>BeaconType</ParaName>
+                    <ParaValue>11i</ParaValue>
+                    <ParaName>WLANViewName</ParaName>
+                    <ParaValue>DEV.WIFI.RD1</ParaValue>
+                    <ParaName>Alias</ParaName>
+                    <ParaValue>SSID1</ParaValue>
+                    <ParaName>ESSID</ParaName>
+                    <ParaValue>NETWORK_NAME</ParaValue>
+                </Instance>
+            </OBJ_WLANAP_ID>
+            <OBJ_WLANCONFIGDRV_ID>
+                <Instance>
+                    <ParaName>_InstID</ParaName>
+                    <ParaValue>DEV.WIFI.AP1</ParaValue>
+                    <ParaName>Bssid</ParaName>
+                    <ParaValue>MAC_ADDRESS</ParaValue>
+                    <ParaName>WLANViewName</ParaName>
+                    <ParaValue>DEV.WIFI.RD1</ParaValue>
+                    <ParaName>ChannelInUsed</ParaName>
+                    <ParaValue>11</ParaValue>
+                </Instance>
+            </OBJ_WLANCONFIGDRV_ID>
+            <OBJ_WLANSETTING_ID>
+                <Instance>
+                    <ParaName>_InstID</ParaName>
+                    <ParaValue>DEV.WIFI.RD1</ParaValue>
+                    <ParaName>Band</ParaName>
+                    <ParaValue>2.4GHz</ParaValue>
+                </Instance>
+            </OBJ_WLANSETTING_ID>
+        </ajax_response_xml_root>
+        """
 
-        headers = self.client._headers_with_cookies({})
+        networks = ZteWifiClient._parse_wlan_status(text)
 
-        self.assertEqual(
-            headers["Cookie"],
-            "_TESTCOOKIESUPPORT=1; Other=other-value; SID=sid-value",
-        )
+        self.assertEqual(len(networks), 1)
+        self.assertEqual(networks[0].instance_id, "DEV.WIFI.AP1")
+        self.assertTrue(networks[0].enabled)
+        self.assertEqual(networks[0].essid, "NETWORK_NAME")
+        self.assertEqual(networks[0].alias, "SSID1")
+        self.assertEqual(networks[0].band, "2.4GHz")
+        self.assertEqual(networks[0].bssid, "MAC_ADDRESS")
+        self.assertEqual(networks[0].channel_in_used, "11")
+        self.assertEqual(networks[0].beacon_type, "11i")
 
 
 class ZteWifiClientRequestFlowTest(unittest.IsolatedAsyncioTestCase):
@@ -163,7 +231,8 @@ class ZteWifiClientRequestFlowTest(unittest.IsolatedAsyncioTestCase):
         session = FakeSession(
             [
                 FakeResponse(
-                    'LoginFormObj.addParameter("_sessionTOKEN", "111111");'
+                    'LoginFormObj.addParameter("_sessionTOKEN", "111111");',
+                    headers={"Set-Cookie": "_TESTCOOKIESUPPORT=1"},
                 ),
                 FakeResponse("<token>17007188</token>"),
                 FakeResponse("", status=302, headers={"Set-Cookie": "SID=sid-value"}),
@@ -201,15 +270,23 @@ class ZteWifiClientRequestFlowTest(unittest.IsolatedAsyncioTestCase):
                 ("POST", "/common_page/Localnet_WlanBasicAd_WLANSSIDConf_lua.lua"),
             ],
         )
-        self.assertEqual(session.calls[0]["headers"]["Cookie"], "_TESTCOOKIESUPPORT=1")
+        self.assertNotIn("Cookie", session.calls[0]["headers"])
+        self.assertEqual(
+            session.calls[1]["headers"]["Cookie"],
+            "_TESTCOOKIESUPPORT=1",
+        )
+        self.assertEqual(
+            session.calls[2]["headers"]["Cookie"],
+            "_TESTCOOKIESUPPORT=1",
+        )
         self.assertEqual(
             session.calls[2]["data"]["_sessionTOKEN"],
             "111111",
         )
         self.assertEqual(session.calls[2]["allow_redirects"], False)
         self.assertEqual(
-            session.calls[4]["headers"]["Cookie"],
-            "_TESTCOOKIESUPPORT=1; SID=sid-value",
+            _cookie_pairs(session.calls[4]["headers"]["Cookie"]),
+            {"_TESTCOOKIESUPPORT=1", "SID=sid-value"},
         )
         self.assertEqual(
             session.calls[4]["data"],
@@ -220,6 +297,82 @@ class ZteWifiClientRequestFlowTest(unittest.IsolatedAsyncioTestCase):
                 "_sessionTOKEN": "222222",
             },
         )
+
+    async def test_get_wifi_networks_logs_in_and_fetches_status(self) -> None:
+        """Log in before requesting the WLAN status AJAX endpoint."""
+        session = FakeSession(
+            [
+                FakeResponse(
+                    'LoginFormObj.addParameter("_sessionTOKEN", "111111");',
+                    headers={"Set-Cookie": "_TESTCOOKIESUPPORT=1"},
+                ),
+                FakeResponse("<token>17007188</token>"),
+                FakeResponse("", status=302, headers={"Set-Cookie": "SID=sid-value"}),
+                FakeResponse("<ajax_response_xml_root><IF_ERRORSTR>SUCC</IF_ERRORSTR></ajax_response_xml_root>"),
+                FakeResponse("_sessionTmpToken = \"222222\";"),
+                FakeResponse(
+                    """
+                    <ajax_response_xml_root>
+                        <IF_ERRORSTR>SUCC</IF_ERRORSTR>
+                        <OBJ_WLANAP_ID>
+                            <Instance>
+                                <ParaName>_InstID</ParaName>
+                                <ParaValue>DEV.WIFI.AP1</ParaValue>
+                                <ParaName>Enable</ParaName>
+                                <ParaValue>0</ParaValue>
+                                <ParaName>ESSID</ParaName>
+                                <ParaValue>Guest</ParaValue>
+                            </Instance>
+                        </OBJ_WLANAP_ID>
+                    </ajax_response_xml_root>
+                    """
+                ),
+            ]
+        )
+        client = ZteWifiClient(
+            session=session,  # type: ignore[arg-type]
+            host="http://192.168.2.1",
+            username="admin",
+            password="111111",
+            instance_id="DEV.WIFI.AP6",
+        )
+
+        with patch("custom_components.zte_wifi.zte.time", return_value=0):
+            networks = await client.get_wifi_networks()
+
+        self.assertEqual(
+            [
+                (call["method"], call["url"].split("192.168.2.1", 1)[1])
+                for call in session.calls
+            ],
+            [
+                ("GET", "/"),
+                (
+                    "GET",
+                    "/function_module/login_module/login_page/logintoken_lua.lua?_=0",
+                ),
+                ("POST", "/"),
+                (
+                    "GET",
+                    "/getpage.lua?pid=1005&nextpage=home_wlanDevice_lua.lua&InstNum=5&_=0",
+                ),
+                (
+                    "GET",
+                    "/getpage.lua?pid=123&nextpage=Localnet_LocalnetStatusUser_t.lp&Menu3Location=0&_=0",
+                ),
+                ("GET", "/common_page/wlanStatus_lua.lua?_=0"),
+            ],
+        )
+        self.assertEqual(networks[0].instance_id, "DEV.WIFI.AP1")
+        self.assertFalse(networks[0].enabled)
+        self.assertEqual(networks[0].essid, "Guest")
+        self.assertEqual(session.calls[3]["headers"]["accept"], "application/xml, text/xml, */*; q=0.01")
+        self.assertEqual(session.calls[3]["headers"]["x-requested-with"], "XMLHttpRequest")
+        self.assertEqual(session.calls[4]["headers"]["accept"], "text/html, */*; q=0.01")
+        self.assertEqual(session.calls[4]["headers"]["proxy-connection"], "keep-alive")
+        self.assertEqual(session.calls[4]["headers"]["x-requested-with"], "XMLHttpRequest")
+        self.assertEqual(session.calls[5]["headers"]["x-requested-with"], "XMLHttpRequest")
+        self.assertNotIn("content-type", session.calls[5]["headers"])
 
 
 if __name__ == "__main__":

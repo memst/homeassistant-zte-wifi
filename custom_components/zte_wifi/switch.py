@@ -7,12 +7,13 @@ from typing import Any
 
 import voluptuous as vol
 
+from aiohttp import CookieJar
 from homeassistant.components.switch import PLATFORM_SCHEMA, SwitchEntity
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 import homeassistant.helpers.config_validation as cv
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
@@ -54,7 +55,10 @@ async def async_setup_platform(
 def _build_client(hass: HomeAssistant, config: ConfigType) -> ZteWifiClient:
     """Create a router client from platform configuration."""
     return ZteWifiClient(
-        session=async_get_clientsession(hass),
+        session=async_create_clientsession(
+            hass,
+            cookie_jar=CookieJar(unsafe=True),
+        ),
         host=config[CONF_HOST],
         username=config[CONF_USERNAME],
         password=config[CONF_PASSWORD],

@@ -1,6 +1,6 @@
 Things to note:
 - `$CURRENT_TS` is always a newly-generated current epoch time in millis.
-- We should make sure that there's also always a cookie `_TESTCOOKIESUPPORT=1` in our requests.
+- We must follow the `Set-Cookie` headers.
 
 1. GET on '/' page with no cookies returns an HTML with a line:
 ```
