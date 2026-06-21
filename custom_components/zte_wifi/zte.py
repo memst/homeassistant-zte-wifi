@@ -275,20 +275,27 @@ class ZteWifiClient:
         location: str | None = None,
         set_cookie_headers: list[str] | None = None,
     ) -> None:
-        if not self.diagnostics:
-            return
-
-        print(f"\n=== {method} {path} ===")
-        print("request_headers:")
+        lines = [f"\n=== {method} {path} ===", "request_headers:"]
         for key, value in request_headers.items():
-            print(f"  {key}: {value}")
-        print(f"request_cookies: {request_cookies or '<none>'}")
-        print(f"response_code: {status}")
-        print("parsed_response:")
+            lines.append(f"  {key}: {value}")
+        lines.extend(
+            [
+                f"request_cookies: {request_cookies or '<none>'}",
+                f"response_code: {status}",
+                "parsed_response:",
+            ]
+        )
         for key, value in self._parse_response_parts(
             text, location, set_cookie_headers or []
         ).items():
-            print(f"  {key}: {value}")
+            lines.append(f"  {key}: {value}")
+
+        diagnostics = "\n".join(lines)
+        if self.diagnostics:
+            print(diagnostics)
+            return
+
+        _LOGGER.debug("%s", diagnostics)
 
     @classmethod
     def _parse_response_parts(

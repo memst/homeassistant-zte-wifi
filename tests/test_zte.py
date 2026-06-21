@@ -161,6 +161,53 @@ class ZteWifiClientTest(unittest.TestCase):
             },
         )
 
+    def test_print_diagnostics_prints_to_stdout_when_enabled(self) -> None:
+        """Print diagnostics directly for local diagnostic scripts."""
+        self.client.diagnostics = True
+
+        with patch("builtins.print") as mock_print:
+            self.client._print_diagnostics(
+                "GET",
+                "/status",
+                {"accept": "text/xml"},
+                "",
+                200,
+                "<ajax_response_xml_root><IF_ERRORSTR>SUCC</IF_ERRORSTR></ajax_response_xml_root>",
+            )
+
+        mock_print.assert_called_once()
+        diagnostics = mock_print.call_args.args[0]
+        self.assertIn("=== GET /status ===", diagnostics)
+        self.assertIn("request_headers:\n  accept: text/xml", diagnostics)
+        self.assertIn("request_cookies: <none>", diagnostics)
+        self.assertIn("response_code: 200", diagnostics)
+        self.assertIn("  IF_ERRORSTR: SUCC", diagnostics)
+
+    def test_print_diagnostics_logs_debug_when_disabled(self) -> None:
+        """Keep request diagnostics available at debug level by default."""
+        with patch("custom_components.zte_wifi.zte._LOGGER.debug") as mock_debug:
+            self.client._print_diagnostics(
+                "POST",
+                "/apply",
+                {"content-type": "application/x-www-form-urlencoded"},
+                "SID=sid-value",
+                302,
+                "",
+                location="/next",
+            )
+
+        mock_debug.assert_called_once()
+        self.assertEqual(mock_debug.call_args.args[0], "%s")
+        diagnostics = mock_debug.call_args.args[1]
+        self.assertIn("=== POST /apply ===", diagnostics)
+        self.assertIn(
+            "request_headers:\n  content-type: application/x-www-form-urlencoded",
+            diagnostics,
+        )
+        self.assertIn("request_cookies: SID=sid-value", diagnostics)
+        self.assertIn("response_code: 302", diagnostics)
+        self.assertIn("  location: /next", diagnostics)
+
     def test_is_login_page_detects_login_form_markup(self) -> None:
         """Treat a rendered login form as a login page."""
         text = "<input name='Username'><input name='Password'><button>Login</button>"
