@@ -91,22 +91,22 @@ class ZteWifiClient:
     _dump_count: int = 0
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
+    async def get_wifi_networks(self) -> list[ZteWifiNetwork]:
+        """Log in and fetch the current status for every WLAN AP instance."""
+        async with self._lock:
+            await self._login()
+            await self._get((_LOCALNET_STATUS_PAGE_PATH))
+            text = await self._get((_WLAN_STATUS_PATH))
+            return parse_wlan_status(text)
+
     async def set_enabled(self, enabled: bool) -> None:
         """Set the WLAN AP enabled flag."""
         async with self._lock:
             await self._set_enabled(enabled)
 
-    async def get_wifi_networks(self) -> list[ZteWifiNetwork]:
-        """Log in and fetch the current status for every WLAN AP instance."""
-        async with self._lock:
-            await self._login()
-            await self._get(self._cache_busted(_LOCALNET_STATUS_PAGE_PATH))
-            text = await self._get(self._cache_busted(_WLAN_STATUS_PATH))
-            return parse_wlan_status(text)
-
     async def _set_enabled(self, enabled: bool) -> None:
         await self._login()
-        page_text = await self._get(self._cache_busted(_WLAN_PAGE_PATH))
+        page_text = await self._get((_WLAN_PAGE_PATH))
         wlan_page_token = self._extract_wlan_page_token(page_text)
         if not wlan_page_token:
             raise ZteRouterError("Could not find _sessionTmpToken on WLAN page")
@@ -133,7 +133,7 @@ class ZteWifiClient:
         if not login_form_token:
             raise ZteRouterError("Could not find _sessionTOKEN on login page")
 
-        login_token_text = await self._get(self._cache_busted(_LOGIN_TOKEN_PATH))
+        login_token_text = await self._get((_LOGIN_TOKEN_PATH))
         login_token = self._extract_login_token(login_token_text)
         password_hash = self._hash_password(self.password, login_token)
 
@@ -228,22 +228,6 @@ class ZteWifiClient:
 
     def _url(self, path: str) -> str:
         return urljoin(self.host.rstrip("/") + "/", path.lstrip("/"))
-
-    @staticmethod
-    def _cache_busted(path: str) -> str:
-        current_ts = int(time() * 1000)
-        parts = urlsplit(path)
-        query = parts.query
-        separator = "&" if query else ""
-        return urlunsplit(
-            (
-                parts.scheme,
-                parts.netloc,
-                parts.path,
-                f"{query}{separator}_={current_ts}",
-                parts.fragment,
-            )
-        )
 
     @staticmethod
     def _hash_password(password: str, login_token: str) -> str:
