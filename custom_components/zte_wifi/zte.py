@@ -10,9 +10,8 @@ from http.cookies import SimpleCookie
 import logging
 from pathlib import Path
 import re
-from time import time
 from typing import Any
-from urllib.parse import urljoin, urlsplit, urlunsplit
+from urllib.parse import urljoin
 from xml.etree import ElementTree
 
 from aiohttp import ClientError, ClientSession
@@ -95,8 +94,8 @@ class ZteWifiClient:
         """Log in and fetch the current status for every WLAN AP instance."""
         async with self._lock:
             await self._login()
-            await self._get((_LOCALNET_STATUS_PAGE_PATH))
-            text = await self._get((_WLAN_STATUS_PATH))
+            await self._get(_LOCALNET_STATUS_PAGE_PATH)
+            text = await self._get(_WLAN_STATUS_PATH)
             return parse_wlan_status(text)
 
     async def set_enabled(self, enabled: bool) -> None:
@@ -106,7 +105,7 @@ class ZteWifiClient:
 
     async def _set_enabled(self, enabled: bool) -> None:
         await self._login()
-        page_text = await self._get((_WLAN_PAGE_PATH))
+        page_text = await self._get(_WLAN_PAGE_PATH)
         wlan_page_token = self._extract_wlan_page_token(page_text)
         if not wlan_page_token:
             raise ZteRouterError("Could not find _sessionTmpToken on WLAN page")
@@ -133,7 +132,10 @@ class ZteWifiClient:
         if not login_form_token:
             raise ZteRouterError("Could not find _sessionTOKEN on login page")
 
-        login_token_text = await self._get((_LOGIN_TOKEN_PATH))
+        login_token_text = await self._get(
+            _LOGIN_TOKEN_PATH,
+            _AJAX_HEADERS,
+        )
         login_token = self._extract_login_token(login_token_text)
         password_hash = self._hash_password(self.password, login_token)
 
@@ -147,15 +149,19 @@ class ZteWifiClient:
         if "SID" not in self.session.cookie_jar.filter_cookies(URL(self._url("/"))):
             raise ZteRouterError("Router login did not return a SID cookie")
 
-    async def _get(self, path: str) -> str:
-        request_headers = self._request_headers(_BROWSER_HEADERS)
+    async def _get(
+        self,
+        path: str,
+        headers: Mapping[str, str] = _BROWSER_HEADERS,
+    ) -> str:
+        request_headers = self._request_headers(headers)
+        request_headers.pop("content-type", None)
         response = await self._request(
             "GET",
             path,
             request_headers,
         )
         return response.text
-
 
     async def _post(
         self,

@@ -1,7 +1,7 @@
 # ZTE WiFi Home Assistant integration
 
-Tiny YAML-only custom integration that exposes one Home Assistant `switch` for a
-ZTE router WLAN AP instance, such as `DEV.WIFI.AP6`.
+Tiny custom integration that exposes one Home Assistant `switch` for a ZTE
+router WLAN AP instance, such as `DEV.WIFI.AP6`.
 
 It fetches a fresh router `_sessionTOKEN`, logs in, and sends the WLAN
 `Enable=1` or `Enable=0` requests each time the switch is toggled.
@@ -105,11 +105,11 @@ uv run python scripts/toggle_zte_wifi.py on --apply-payload apply_payload.json
 
 ## Use
 
-After restart, Home Assistant creates `switch.zte_wifi`. You can expose that
-entity to Assist/voice assistants and say things like:
+After setup, Home Assistant creates a switch entity. You can expose that entity
+to Assist/voice assistants and say things like:
 
 - "Turn on ZTE WiFi"
 - "Turn off ZTE WiFi"
 
-The switch is optimistic and does not poll the router. That keeps it lightweight,
-but the displayed state only reflects the last command sent by Home Assistant.
+Home Assistant polls the router for WLAN status, so the displayed state reflects
+the router when the status endpoint includes the configured AP instance.
