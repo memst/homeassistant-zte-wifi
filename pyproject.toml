@@ -8,3 +8,8 @@ dependencies = [
     "aiohttp>=3.9",
     "colorama>=0.4.6",
 ]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.18",
+]
