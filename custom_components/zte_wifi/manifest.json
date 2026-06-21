@@ -1,0 +1,9 @@
+{
+  "domain": "zte_wifi",
+  "name": "ZTE WiFi",
+  "codeowners": [],
+  "documentation": "",
+  "iot_class": "assumed_state",
+  "requirements": [],
+  "version": "0.1.0"
+}

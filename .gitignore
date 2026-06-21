@@ -1,0 +1,24 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv/
+
+# Local OS/editor files
+.DS_Store
+*.swp
+*.swo
+
+# Local router debug output
+scripts/dumps/
+*.log

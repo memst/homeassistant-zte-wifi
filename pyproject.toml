@@ -1,0 +1,10 @@
+[project]
+name = "homeassistant-zte-wifi"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aiohttp>=3.9",
+    "colorama>=0.4.6",
+]
