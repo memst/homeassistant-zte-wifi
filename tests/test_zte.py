@@ -80,8 +80,8 @@ class ZteWifiClientTest(unittest.TestCase):
             "56a0c29b3bd4a366ea5a43f9ae6d19ea8536ad2c0a2261b453ef44a928ff7c24",
         )
 
-    def test_extract_session_token_1_from_login_form(self) -> None:
-        """Extract the first session token from the login form only."""
+    def test_extract_login_form_token(self) -> None:
+        """Extract the login form token only."""
         text = """
         <script>
         var _sessionTmpToken = "999999";
@@ -89,7 +89,7 @@ class ZteWifiClientTest(unittest.TestCase):
         </script>
         """
 
-        self.assertEqual(ZteWifiClient._extract_session_token_1(text), "123456")
+        self.assertEqual(ZteWifiClient._extract_login_form_token(text), "123456")
 
     def test_extract_session_token_2_from_page_token(self) -> None:
         """Extract the second session token from the page token only."""
@@ -155,7 +155,7 @@ class ZteWifiClientRequestFlowTest(unittest.IsolatedAsyncioTestCase):
     """Tests for the documented router request sequence."""
 
     async def test_set_enabled_follows_documented_request_order(self) -> None:
-        """Use SESSION_TOKEN_1 for login and SESSION_TOKEN_2 for WLAN apply."""
+        """Use login_form_token for login and SESSION_TOKEN_2 for WLAN apply."""
         session = FakeSession(
             [
                 FakeResponse(

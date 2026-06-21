@@ -4,15 +4,15 @@ Things to note:
 
 1. GET on '/' page with no cookies returns an HTML with a line:
 ```
-LoginFormObj.addParameter("_sessionTOKEN", "$SESSION_TOKEN_1");
+LoginFormObj.addParameter("_sessionTOKEN", "$LOGIN_FORM_TOKEN");
 ```
-Where `$SESSION_TOKEN_1` is some number we want to get.
+Where `$LOGIN_FORM_TOKEN` is some number we want to get.
 
 2. GET on `/function_module/login_module/login_page/logintoken_lua.lua?_=$CURRENT_TS`
 This returns an AJAX response with a login token that should be combined with the password.
 3. POST on `/` with a payload:
-`Username=admin&Password=$PASSWORD_HASH&action=login&_sessionTOKEN=$SESSION_TOKEN_1`
-Where `$PASSWORD_HASH` is the password put through the existing `_hash_password` function and `$SESSION_TOKEN_1` is the value we got in step 1.
+`Username=admin&Password=$PASSWORD_HASH&action=login&_sessionTOKEN=$LOGIN_FORM_TOKEN`
+Where `$PASSWORD_HASH` is the password put through the existing `_hash_password` function and `$LOGIN_FORM_TOKEN` is the value we got in step 1.
 
 This results in HTTP 302 that also has a `Set-Cookie` parameter for `SID` cookie that we should set for the rest of the session.
 

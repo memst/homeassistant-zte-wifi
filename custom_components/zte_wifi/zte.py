@@ -25,7 +25,7 @@ _WLAN_AP_PATH = "/common_page/Localnet_WlanBasicAd_WLANSSIDConf_lua.lua"
 
 _LOGGER = logging.getLogger(__name__)
 
-_SESSION_TOKEN_1_PATTERNS = (
+_LOGIN_FORM_TOKEN_PATTERNS = (
     re.compile(r'LoginFormObj\.addParameter\(["\']_sessionTOKEN["\'],\s*["\']([0-9]+)["\']\)'),
 )
 _SESSION_TMP_TOKEN_PATTERN = re.compile(
@@ -126,8 +126,8 @@ class ZteWifiClient:
         self._token = None
         self._cookies = {"_TESTCOOKIESUPPORT": "1"}
         text = await self._get("/")
-        session_token_1 = self._extract_session_token_1(text)
-        if not session_token_1:
+        login_form_token = self._extract_login_form_token(text)
+        if not login_form_token:
             raise ZteRouterError("Could not find _sessionTOKEN on login page")
 
         login_token_text = await self._get(self._cache_busted(_LOGIN_TOKEN_PATH))
@@ -138,12 +138,12 @@ class ZteWifiClient:
             "Username": self.username,
             "Password": password_hash,
             "action": "login",
-            "_sessionTOKEN": session_token_1,
+            "_sessionTOKEN": login_form_token,
         }
         await self._post("/", payload, _LOGIN_HEADERS, allow_redirects=False)
         if "SID" not in self._cookies:
             raise ZteRouterError("Router login did not return a SID cookie")
-        return session_token_1
+        return login_form_token
 
     async def _get(self, path: str) -> str:
         request_headers = self._headers_with_cookies(_BROWSER_HEADERS)
@@ -348,9 +348,9 @@ class ZteWifiClient:
                 parts["set_cookie_sid"] = cookie["SID"].value
             if "_TESTCOOKIESUPPORT" in cookie:
                 parts["set_cookie_test_cookie"] = cookie["_TESTCOOKIESUPPORT"].value
-        session_token_1 = cls._extract_session_token_1(text)
-        if session_token_1:
-            parts["session_token_1"] = session_token_1
+        login_form_token = cls._extract_login_form_token(text)
+        if login_form_token:
+            parts["login_form_token"] = login_form_token
         session_token_2 = cls._extract_session_token_2(text)
         if session_token_2:
             parts["session_token_2"] = session_token_2
@@ -404,8 +404,8 @@ class ZteWifiClient:
         }
 
     @staticmethod
-    def _extract_session_token_1(text: str) -> str | None:
-        for pattern in _SESSION_TOKEN_1_PATTERNS:
+    def _extract_login_form_token(text: str) -> str | None:
+        for pattern in _LOGIN_FORM_TOKEN_PATTERNS:
             match = pattern.search(text)
             if match:
                 return match.group(1)
@@ -420,7 +420,7 @@ class ZteWifiClient:
 
     @classmethod
     def _extract_token(cls, text: str) -> str | None:
-        return cls._extract_session_token_2(text) or cls._extract_session_token_1(text)
+        return cls._extract_session_token_2(text) or cls._extract_login_form_token(text)
 
     @staticmethod
     def _decode_js_token(value: str) -> str:
