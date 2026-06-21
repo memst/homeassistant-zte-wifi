@@ -72,8 +72,6 @@ class ZteWifiSwitch(SwitchEntity):
     """Optimistic switch for the second ZTE WiFi AP."""
 
     _attr_has_entity_name = False
-    _attr_should_poll = False
-    _attr_assumed_state = True
 
     def __init__(self, name: str, client: ZteWifiClient) -> None:
         """Initialize the switch."""
