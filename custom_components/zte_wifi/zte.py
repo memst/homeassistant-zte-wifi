@@ -18,6 +18,9 @@ from xml.etree import ElementTree
 from aiohttp import ClientError, ClientSession
 from yarl import URL
 
+from .errors import ZteRouterError
+from .network import ZteWifiNetwork, parse_wlan_status
+
 _LOGIN_TOKEN_PATH = "/function_module/login_module/login_page/logintoken_lua.lua"
 _WLAN_PAGE_PATH = (
     "/getpage.lua?pid=123&nextpage=Localnet_WlanBasicUser_t.lp&Menu3Location=0"
@@ -62,10 +65,6 @@ _AJAX_HEADERS = {
 _SECRET_KEYS = {"password", "keypassphrase"}
 
 
-class ZteRouterError(Exception):
-    """Raised when the router rejects or fails a request."""
-
-
 @dataclass(slots=True)
 class _ResponseData:
     """Normalized router response details."""
@@ -74,21 +73,6 @@ class _ResponseData:
     text: str
     location: str | None = None
     set_cookie_headers: list[str] = field(default_factory=list)
-
-
-@dataclass(frozen=True, slots=True)
-class ZteWifiNetwork:
-    """Parsed status for one ZTE WLAN AP instance."""
-
-    instance_id: str
-    enabled: bool | None
-    essid: str | None
-    alias: str | None
-    wlan_view_name: str | None
-    band: str | None
-    bssid: str | None
-    channel_in_used: str | None
-    beacon_type: str | None
 
 
 @dataclass(slots=True)
@@ -118,7 +102,7 @@ class ZteWifiClient:
             await self._login()
             await self._get(self._cache_busted(_LOCALNET_STATUS_PAGE_PATH))
             text = await self._get(self._cache_busted(_WLAN_STATUS_PATH))
-            return self._parse_wlan_status(text)
+            return parse_wlan_status(text)
 
     async def _set_enabled(self, enabled: bool) -> None:
         await self._login()
@@ -289,89 +273,6 @@ class ZteWifiClient:
             "_InstID": self.instance_id,
             "_sessionTOKEN": session_token,
         }
-
-    @classmethod
-    def _parse_wlan_status(cls, text: str) -> list[ZteWifiNetwork]:
-        try:
-            root = ElementTree.fromstring(text)
-        except ElementTree.ParseError as err:
-            raise ZteRouterError("Could not parse WLAN status response") from err
-
-        error = root.findtext(".//IF_ERRORSTR")
-        if error and error.strip().upper() != "SUCC":
-            raise ZteRouterError(f"Router returned WLAN status error: {error.strip()}")
-
-        aps = cls._parse_parameter_instances(root, "OBJ_WLANAP_ID")
-        drivers = {
-            instance["_InstID"]: instance
-            for instance in cls._parse_parameter_instances(
-                root,
-                "OBJ_WLANCONFIGDRV_ID",
-            )
-            if "_InstID" in instance
-        }
-        settings = {
-            instance["_InstID"]: instance
-            for instance in cls._parse_parameter_instances(
-                root,
-                "OBJ_WLANSETTING_ID",
-            )
-            if "_InstID" in instance
-        }
-
-        networks: list[ZteWifiNetwork] = []
-        for ap in aps:
-            instance_id = ap.get("_InstID")
-            if not instance_id:
-                continue
-
-            driver = drivers.get(instance_id, {})
-            wlan_view_name = ap.get("WLANViewName") or driver.get("WLANViewName")
-            setting = settings.get(wlan_view_name or "", {})
-            enabled = cls._parse_enabled(ap.get("Enable"))
-
-            networks.append(
-                ZteWifiNetwork(
-                    instance_id=instance_id,
-                    enabled=enabled,
-                    essid=ap.get("ESSID"),
-                    alias=ap.get("Alias"),
-                    wlan_view_name=wlan_view_name,
-                    band=setting.get("Band"),
-                    bssid=driver.get("Bssid"),
-                    channel_in_used=driver.get("ChannelInUsed"),
-                    beacon_type=ap.get("BeaconType"),
-                )
-            )
-
-        return networks
-
-    @staticmethod
-    def _parse_parameter_instances(
-        root: ElementTree.Element,
-        section_name: str,
-    ) -> list[dict[str, str]]:
-        instances: list[dict[str, str]] = []
-        for instance in root.findall(f".//{section_name}/Instance"):
-            parsed: dict[str, str] = {}
-            current_name: str | None = None
-            for child in instance:
-                text = (child.text or "").strip()
-                if child.tag == "ParaName":
-                    current_name = text
-                elif child.tag == "ParaValue" and current_name:
-                    parsed[current_name] = text
-                    current_name = None
-            instances.append(parsed)
-        return instances
-
-    @staticmethod
-    def _parse_enabled(value: str | None) -> bool | None:
-        if value == "1":
-            return True
-        if value == "0":
-            return False
-        return None
 
     def _print_diagnostics(
         self,

@@ -25,7 +25,8 @@ from .const import (
     DEFAULT_NAME,
     DOMAIN,
 )
-from .zte import ZteRouterError, ZteWifiClient
+from .errors import ZteRouterError
+from .zte import ZteWifiClient
 
 _LOGGER = logging.getLogger(__name__)
 

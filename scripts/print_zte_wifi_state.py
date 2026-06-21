@@ -16,7 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from custom_components.zte_wifi.const import DEFAULT_HOST, DEFAULT_INSTANCE_ID  # noqa: E402
-from custom_components.zte_wifi.zte import ZteRouterError, ZteWifiClient  # noqa: E402
+from custom_components.zte_wifi.errors import ZteRouterError  # noqa: E402
+from custom_components.zte_wifi.zte import ZteWifiClient  # noqa: E402
 
 
 def _enabled_label(enabled: bool | None) -> str:

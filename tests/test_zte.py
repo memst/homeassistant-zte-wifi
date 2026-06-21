@@ -7,6 +7,7 @@ from unittest.mock import patch
 from typing import Any
 
 from aiohttp import CookieJar
+from custom_components.zte_wifi.network import parse_wlan_status
 from custom_components.zte_wifi.zte import ZteWifiClient
 from yarl import URL
 
@@ -210,7 +211,7 @@ class ZteWifiClientTest(unittest.TestCase):
         </ajax_response_xml_root>
         """
 
-        networks = ZteWifiClient._parse_wlan_status(text)
+        networks = parse_wlan_status(text)
 
         self.assertEqual(len(networks), 1)
         self.assertEqual(networks[0].instance_id, "DEV.WIFI.AP1")

@@ -17,11 +17,12 @@ from aiohttp import ClientSession, CookieJar
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from custom_components.zte_wifi.const import (
+from custom_components.zte_wifi.const import (  # noqa: E402
     DEFAULT_HOST,
     DEFAULT_INSTANCE_ID,
 )
-from custom_components.zte_wifi.zte import ZteWifiClient, ZteRouterError
+from custom_components.zte_wifi.errors import ZteRouterError  # noqa: E402
+from custom_components.zte_wifi.zte import ZteWifiClient  # noqa: E402
 
 
 def _load_apply_payload(value: str | None) -> dict[str, Any]:
