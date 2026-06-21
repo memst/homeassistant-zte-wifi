@@ -18,7 +18,7 @@ This results in HTTP 302 that also has a `Set-Cookie` parameter for `SID` cookie
 
 4. GET on `/getpage.lua?pid=123&nextpage=Localnet_WlanBasicUser_t.lp&Menu3Location=0&_=$CURRENT_TS`
 This should return HTML with a line:
-`_sessionTmpToken = "$SESSION_TOKEN_2"` which we should parse
+`_sessionTmpToken = "$WLAN_PAGE_TOKEN"` which we should parse
 
 5. POST to `/common_page/Localnet_WlanBasicAd_WLANSSIDConf_lua.lua` with payload:
-`IF_ACTION=Apply&Enable=0&_InstID=DEV.WIFI.AP6&_sessionTOKEN=$SESSION_TOKEN_2`
+`IF_ACTION=Apply&Enable=0&_InstID=DEV.WIFI.AP6&_sessionTOKEN=$WLAN_PAGE_TOKEN`

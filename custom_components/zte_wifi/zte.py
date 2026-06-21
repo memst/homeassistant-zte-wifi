@@ -28,7 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 _LOGIN_FORM_TOKEN_PATTERNS = (
     re.compile(r'LoginFormObj\.addParameter\(["\']_sessionTOKEN["\'],\s*["\']([0-9]+)["\']\)'),
 )
-_SESSION_TMP_TOKEN_PATTERN = re.compile(
+_WLAN_PAGE_TOKEN_PATTERN = re.compile(
     r'_sessionTmpToken\s*=\s*["\']((?:\\x[0-9a-fA-F]{2})+|[0-9]+)["\']'
 )
 
@@ -101,23 +101,23 @@ class ZteWifiClient:
     async def _set_enabled(self, enabled: bool) -> None:
         await self._login()
         page_text = await self._get(self._cache_busted(_WLAN_PAGE_PATH))
-        session_token_2 = self._extract_session_token_2(page_text)
-        if not session_token_2:
+        wlan_page_token = self._extract_wlan_page_token(page_text)
+        if not wlan_page_token:
             raise ZteRouterError("Could not find _sessionTmpToken on WLAN page")
-        self._token = session_token_2
+        self._token = wlan_page_token
 
         value = "1" if enabled else "0"
         text = await self._post(
             _WLAN_AP_PATH,
-            self._build_apply_payload(value, session_token_2),
+            self._build_apply_payload(value, wlan_page_token),
             _AJAX_HEADERS,
         )
-        session_token_2 = self._update_token(text) or session_token_2
+        wlan_page_token = self._update_token(text) or wlan_page_token
 
         if self.apply_payload:
             text = await self._post(
                 _WLAN_AP_PATH,
-                self._build_apply_payload(value, session_token_2, self.apply_payload),
+                self._build_apply_payload(value, wlan_page_token, self.apply_payload),
                 _AJAX_HEADERS,
             )
             self._update_token(text)
@@ -292,7 +292,7 @@ class ZteWifiClient:
         self._dump_response(method, path, response.status, response.text)
 
     def _update_token(self, text: str) -> str | None:
-        token = self._extract_session_token_2(text)
+        token = self._extract_wlan_page_token(text)
         if token:
             self._token = token
             _LOGGER.debug("Updated ZTE router session token")
@@ -351,9 +351,9 @@ class ZteWifiClient:
         login_form_token = cls._extract_login_form_token(text)
         if login_form_token:
             parts["login_form_token"] = login_form_token
-        session_token_2 = cls._extract_session_token_2(text)
-        if session_token_2:
-            parts["session_token_2"] = session_token_2
+        wlan_page_token = cls._extract_wlan_page_token(text)
+        if wlan_page_token:
+            parts["wlan_page_token"] = wlan_page_token
 
         try:
             root = ElementTree.fromstring(text)
@@ -412,15 +412,15 @@ class ZteWifiClient:
         return None
 
     @staticmethod
-    def _extract_session_token_2(text: str) -> str | None:
-        tmp_tokens = _SESSION_TMP_TOKEN_PATTERN.findall(text)
+    def _extract_wlan_page_token(text: str) -> str | None:
+        tmp_tokens = _WLAN_PAGE_TOKEN_PATTERN.findall(text)
         if tmp_tokens:
             return ZteWifiClient._decode_js_token(tmp_tokens[-1])
         return None
 
     @classmethod
     def _extract_token(cls, text: str) -> str | None:
-        return cls._extract_session_token_2(text) or cls._extract_login_form_token(text)
+        return cls._extract_wlan_page_token(text) or cls._extract_login_form_token(text)
 
     @staticmethod
     def _decode_js_token(value: str) -> str:
