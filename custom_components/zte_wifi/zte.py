@@ -25,9 +25,6 @@ _WLAN_AP_PATH = "/common_page/Localnet_WlanBasicAd_WLANSSIDConf_lua.lua"
 
 _LOGGER = logging.getLogger(__name__)
 
-_LOGIN_FORM_TOKEN_PATTERNS = (
-    re.compile(r'LoginFormObj\.addParameter\(["\']_sessionTOKEN["\'],\s*["\']([0-9]+)["\']\)'),
-)
 _WLAN_PAGE_TOKEN_PATTERN = re.compile(
     r'_sessionTmpToken\s*=\s*["\']((?:\\x[0-9a-fA-F]{2})+|[0-9]+)["\']'
 )
@@ -89,8 +86,6 @@ class ZteWifiClient:
 
     _cookies: dict[str, str] = field(default_factory=dict)
     _dump_count: int = 0
-    _last_location: str | None = None
-    _token: str | None = None
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     async def set_enabled(self, enabled: bool) -> None:
@@ -104,7 +99,6 @@ class ZteWifiClient:
         wlan_page_token = self._extract_wlan_page_token(page_text)
         if not wlan_page_token:
             raise ZteRouterError("Could not find _sessionTmpToken on WLAN page")
-        self._token = wlan_page_token
 
         value = "1" if enabled else "0"
         text = await self._post(
@@ -112,18 +106,16 @@ class ZteWifiClient:
             self._build_apply_payload(value, wlan_page_token),
             _AJAX_HEADERS,
         )
-        wlan_page_token = self._update_token(text) or wlan_page_token
+        wlan_page_token = self._extract_wlan_page_token(text) or wlan_page_token
 
         if self.apply_payload:
-            text = await self._post(
+            await self._post(
                 _WLAN_AP_PATH,
                 self._build_apply_payload(value, wlan_page_token, self.apply_payload),
                 _AJAX_HEADERS,
             )
-            self._update_token(text)
 
-    async def _login(self) -> str:
-        self._token = None
+    async def _login(self) -> None:
         self._cookies = {"_TESTCOOKIESUPPORT": "1"}
         text = await self._get("/")
         login_form_token = self._extract_login_form_token(text)
@@ -143,7 +135,6 @@ class ZteWifiClient:
         await self._post("/", payload, _LOGIN_HEADERS, allow_redirects=False)
         if "SID" not in self._cookies:
             raise ZteRouterError("Router login did not return a SID cookie")
-        return login_form_token
 
     async def _get(self, path: str) -> str:
         request_headers = self._headers_with_cookies(_BROWSER_HEADERS)
@@ -170,9 +161,8 @@ class ZteWifiClient:
             payload=payload,
             allow_redirects=allow_redirects,
         )
-        self._last_location = response.location
-        if self._last_location:
-            _LOGGER.debug("POST %s redirect_location=%s", path, self._last_location)
+        if response.location:
+            _LOGGER.debug("POST %s redirect_location=%s", path, response.location)
         if "SessionTimeout" in response.text:
             raise ZteRouterError("Router returned SessionTimeout")
         if path != "/" and self._is_login_page(response.text):
@@ -206,7 +196,18 @@ class ZteWifiClient:
         except ClientError as err:
             raise ZteRouterError(f"Router {method} failed: {err}") from err
 
-        self._record_response(method, path, headers, response_data)
+        self._store_cookies(response_data.set_cookie_headers)
+        self._print_diagnostics(
+            method,
+            path,
+            headers,
+            response_data.status,
+            response_data.text,
+            location=response_data.location,
+            set_cookie_headers=response_data.set_cookie_headers,
+        )
+        self._log_response(method, path, response_data.status, response_data.text)
+        self._dump_response(method, path, response_data.status, response_data.text)
         if response_data.status >= 400:
             raise ZteRouterError(f"Router {method} returned HTTP {response_data.status}")
         return response_data
@@ -238,20 +239,12 @@ class ZteWifiClient:
         merged = dict(headers)
         merged.setdefault("referer", self.host.rstrip("/") + "/")
         self._cookies.setdefault("_TESTCOOKIESUPPORT", "1")
-        if self._cookies:
-            cookie_parts = []
-            if "_TESTCOOKIESUPPORT" in self._cookies:
-                cookie_parts.append(
-                    f"_TESTCOOKIESUPPORT={self._cookies['_TESTCOOKIESUPPORT']}"
-                )
-            if "SID" in self._cookies:
-                cookie_parts.append(f"SID={self._cookies['SID']}")
-            cookie_parts.extend(
-                f"{key}={value}"
-                for key, value in self._cookies.items()
-                if key not in {"_TESTCOOKIESUPPORT", "SID"}
+        merged["Cookie"] = "; ".join(
+            f"{name}={value}"
+            for name, value in sorted(
+                self._cookies.items(), key=lambda item: item[0].lower()
             )
-            merged["Cookie"] = "; ".join(cookie_parts)
+        )
         return merged
 
     def _build_apply_payload(
@@ -260,43 +253,13 @@ class ZteWifiClient:
         session_token: str,
         extra_payload: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
-        payload = dict(extra_payload or {})
-        payload.update(
-            {
-                "IF_ACTION": "Apply",
-                "Enable": enabled_value,
-                "_InstID": self.instance_id,
-                "_sessionTOKEN": session_token,
-            }
-        )
-        return payload
-
-    def _record_response(
-        self,
-        method: str,
-        path: str,
-        request_headers: Mapping[str, str],
-        response: _ResponseData,
-    ) -> None:
-        self._store_cookies(response.set_cookie_headers)
-        self._print_diagnostics(
-            method,
-            path,
-            request_headers,
-            response.status,
-            response.text,
-            location=response.location,
-            set_cookie_headers=response.set_cookie_headers,
-        )
-        self._log_response(method, path, response.status, response.text)
-        self._dump_response(method, path, response.status, response.text)
-
-    def _update_token(self, text: str) -> str | None:
-        token = self._extract_wlan_page_token(text)
-        if token:
-            self._token = token
-            _LOGGER.debug("Updated ZTE router session token")
-        return token
+        return {
+            **dict(extra_payload or {}),
+            "IF_ACTION": "Apply",
+            "Enable": enabled_value,
+            "_InstID": self.instance_id,
+            "_sessionTOKEN": session_token,
+        }
 
     def _store_cookies(self, values: list[str]) -> None:
         for value in values:
@@ -405,16 +368,16 @@ class ZteWifiClient:
 
     @staticmethod
     def _extract_login_form_token(text: str) -> str | None:
-        for pattern in _LOGIN_FORM_TOKEN_PATTERNS:
-            match = pattern.search(text)
-            if match:
-                return match.group(1)
-        return None
+        match = re.search(
+            r"LoginFormObj\.addParameter"
+            r'\(["\']_sessionTOKEN["\'],\s*["\']([0-9]+)["\']\)',
+            text,
+        )
+        return match.group(1) if match else None
 
     @staticmethod
     def _extract_wlan_page_token(text: str) -> str | None:
-        tmp_tokens = _WLAN_PAGE_TOKEN_PATTERN.findall(text)
-        if tmp_tokens:
+        if tmp_tokens := _WLAN_PAGE_TOKEN_PATTERN.findall(text):
             return ZteWifiClient._decode_js_token(tmp_tokens[-1])
         return None
 
@@ -431,21 +394,17 @@ class ZteWifiClient:
             chr(int(match, 16)) for match in re.findall(r"\\x([0-9a-fA-F]{2})", value)
         )
 
-    @classmethod
-    def _login_error_message(cls, text: str) -> str:
-        match = re.search(r"var login_err_msg = [\"']([^\"']*)[\"']", text)
-        if match:
-            message = cls._decode_js_token(match.group(1))
-            if message:
-                return f"Router login failed: {message}"
-        return "Router login failed"
-
     @staticmethod
     def _is_login_page(text: str) -> bool:
+        lowered = text.lower()
         return (
             "showloginPage" in text
             or "Please login" in text
-            or ZteWifiClient._looks_like_login_page(text)
+            or (
+                "username" in lowered
+                and "password" in lowered
+                and "login" in lowered
+            )
         )
 
     @staticmethod
@@ -455,11 +414,6 @@ class ZteWifiClient:
         except ElementTree.ParseError as err:
             raise ZteRouterError("Could not parse login token response") from err
 
-        if root.text:
-            return root.text.strip()
+        if root.text and (token := root.text.strip()):
+            return token
         raise ZteRouterError("Router returned an empty login token")
-
-    @staticmethod
-    def _looks_like_login_page(text: str) -> bool:
-        lowered = text.lower()
-        return "username" in lowered and "password" in lowered and "login" in lowered

@@ -142,13 +142,17 @@ class ZteWifiClientTest(unittest.TestCase):
 
         self.assertTrue(ZteWifiClient._is_login_page(text))
 
-    def test_headers_always_include_test_cookie_first(self) -> None:
-        """Always send the router test cookie before SID."""
+    def test_headers_include_cookies_in_stable_order(self) -> None:
+        """Send cookies in their stored order."""
         self.client._cookies["SID"] = "sid-value"
+        self.client._cookies["Other"] = "other-value"
 
         headers = self.client._headers_with_cookies({})
 
-        self.assertEqual(headers["Cookie"], "_TESTCOOKIESUPPORT=1; SID=sid-value")
+        self.assertEqual(
+            headers["Cookie"],
+            "_TESTCOOKIESUPPORT=1; Other=other-value; SID=sid-value",
+        )
 
 
 class ZteWifiClientRequestFlowTest(unittest.IsolatedAsyncioTestCase):
