@@ -57,7 +57,7 @@ async def async_setup_platform(
     client = _build_client(hass, config)
     async_add_entities(
         [
-            ZteWifiSwitch(
+            _YamlZteWifiSwitch(
                 name=config[CONF_NAME],
                 client=client,
                 instance_id=config[CONF_INSTANCE_ID],
@@ -84,7 +84,7 @@ async def async_setup_entry(
         raise ConfigEntryNotReady(f"Could not set up ZTE WiFi: {err}") from err
 
     async_add_entities(
-        ZteWifiApSwitch(
+        _ConfigEntryZteWifiSwitch(
             coordinator=coordinator,
             router_unique_id=entry.unique_id or router_name.casefold(),
             router_name=router_name,
@@ -111,11 +111,27 @@ def _build_client(hass: HomeAssistant, config: Mapping[str, Any]) -> ZteWifiClie
     )
 
 
-class ZteWifiApSwitch(
+class _ZteWifiSwitchActions:
+    """Shared turn-on/off behavior for all ZTE WiFi switch entities."""
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn on the AP."""
+        await self._set_enabled(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn off the AP."""
+        await self._set_enabled(False)
+
+    async def _set_enabled(self, enabled: bool) -> None:
+        raise NotImplementedError
+
+
+class _ConfigEntryZteWifiSwitch(
+    _ZteWifiSwitchActions,
     CoordinatorEntity[ZteWifiDataUpdateCoordinator],
     SwitchEntity,
 ):
-    """Switch for one ZTE WLAN AP discovered from a router config entry."""
+    """Coordinator-backed switch for one AP discovered by config entry setup."""
 
     _attr_has_entity_name = True
     _attr_should_poll = False
@@ -174,14 +190,6 @@ class ZteWifiApSwitch(
             "beacon_type": network.beacon_type,
         }
 
-    async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on the AP."""
-        await self._set_enabled(True)
-
-    async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn off the AP."""
-        await self._set_enabled(False)
-
     async def _set_enabled(self, enabled: bool) -> None:
         try:
             await self.coordinator.client.set_enabled(enabled, self._instance_id)
@@ -207,8 +215,8 @@ class ZteWifiApSwitch(
         return network.essid or network.alias or instance_id
 
 
-class ZteWifiSwitch(SwitchEntity):
-    """Optimistic switch for the second ZTE WiFi AP."""
+class _YamlZteWifiSwitch(_ZteWifiSwitchActions, SwitchEntity):
+    """Optimistic single-AP switch created by YAML platform setup."""
 
     _attr_has_entity_name = False
 
@@ -227,14 +235,6 @@ class ZteWifiSwitch(SwitchEntity):
         return f"{DOMAIN}_{client.host}_{instance_id}".replace(
             "://", "_"
         ).replace("/", "_")
-
-    async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on the AP."""
-        await self._set_enabled(True)
-
-    async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn off the AP."""
-        await self._set_enabled(False)
 
     async def _set_enabled(self, enabled: bool) -> None:
         try:
