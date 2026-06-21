@@ -146,7 +146,16 @@ class ZteWifiClient:
             "_sessionTOKEN": login_form_token,
         }
         sid_before_login = self._sid_cookie()
-        await self._post("/", payload, _LOGIN_HEADERS, allow_redirects=False)
+        try:
+            await self._post("/", payload, _LOGIN_HEADERS, allow_redirects=False)
+        except ZteRouterError as err:
+            _LOGGER.debug("Login failed, checking for login error message")
+            login_page = await self._get("/")
+            if login_error := self._extract_login_error(login_page):
+                raise ZteRouterError(f"Router login failed: {login_error}")
+            raise err
+            # raise ZteRouterError("Router login did not update the SID cookie")
+
         sid_after_login = self._sid_cookie()
         if not sid_after_login:
             raise ZteRouterError("Router login did not return a SID cookie")

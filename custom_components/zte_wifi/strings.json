@@ -1,0 +1,24 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "name": "Router Name",
+          "host": "Host",
+          "username": "Username",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication",
+      "invalid_host": "Invalid host",
+      "invalid_name": "Invalid router name",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "This router is already configured"
+    }
+  }
+}
