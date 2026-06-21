@@ -2,7 +2,6 @@
   "domain": "zte_wifi",
   "name": "ZTE WiFi",
   "codeowners": [],
-  "config_flow": true,
   "integration_type": "hub",
   "iot_class": "local_polling",
   "requirements": [],
