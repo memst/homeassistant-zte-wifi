@@ -15,7 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers import selector
 
-from .const import DEFAULT_HOST, DEFAULT_INSTANCE_ID, DEFAULT_NAME, DEFAULT_TIMEOUT, DOMAIN
+from .const import DEFAULT_HOST, DEFAULT_NAME, DEFAULT_TIMEOUT, DOMAIN
 from .errors import ZteRouterError
 from .zte import ZteWifiClient
 
@@ -92,7 +92,6 @@ async def _async_validate_input(
         host=data[CONF_HOST],
         username=data[CONF_USERNAME],
         password=data[CONF_PASSWORD],
-        instance_id=DEFAULT_INSTANCE_ID,
     )
 
     try:

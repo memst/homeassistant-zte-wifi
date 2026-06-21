@@ -51,12 +51,11 @@ async def _run(args: argparse.Namespace) -> None:
             host=args.host,
             username=args.username,
             password=password,
-            instance_id=args.instance_id,
             apply_payload=_load_apply_payload(args.apply_payload),
             dump_dir=Path(args.dump_dir) if args.dump_dir else None,
             diagnostics=True,
         )
-        await client.set_enabled(args.state == "on")
+        await client.set_enabled(args.state == "on", args.instance_id)
 
     print(f"ZTE WiFi set to {args.state}")
 

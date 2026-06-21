@@ -82,7 +82,6 @@ class ZteWifiClient:
     host: str
     username: str
     password: str
-    instance_id: str
     apply_payload: Mapping[str, Any] = field(default_factory=dict)
     dump_dir: Path | None = None
     diagnostics: bool = False
@@ -98,12 +97,12 @@ class ZteWifiClient:
             text = await self._get(_WLAN_STATUS_PATH)
             return parse_wlan_status(text)
 
-    async def set_enabled(self, enabled: bool) -> None:
+    async def set_enabled(self, enabled: bool, instance_id: str) -> None:
         """Set the WLAN AP enabled flag."""
         async with self._lock:
-            await self._set_enabled(enabled)
+            await self._set_enabled(enabled, instance_id)
 
-    async def _set_enabled(self, enabled: bool) -> None:
+    async def _set_enabled(self, enabled: bool, instance_id: str) -> None:
         await self._login()
         page_text = await self._get(_WLAN_PAGE_PATH)
         wlan_page_token = self._extract_wlan_page_token(page_text)
@@ -113,7 +112,11 @@ class ZteWifiClient:
         value = "1" if enabled else "0"
         text = await self._post(
             _WLAN_AP_PATH,
-            self._build_apply_payload(value, wlan_page_token),
+            self._build_apply_payload(
+                value,
+                wlan_page_token,
+                instance_id=instance_id,
+            ),
             _AJAX_HEADERS,
         )
         wlan_page_token = self._extract_wlan_page_token(text) or wlan_page_token
@@ -121,7 +124,12 @@ class ZteWifiClient:
         if self.apply_payload:
             await self._post(
                 _WLAN_AP_PATH,
-                self._build_apply_payload(value, wlan_page_token, self.apply_payload),
+                self._build_apply_payload(
+                    value,
+                    wlan_page_token,
+                    self.apply_payload,
+                    instance_id=instance_id,
+                ),
                 _AJAX_HEADERS,
             )
 
@@ -276,13 +284,14 @@ class ZteWifiClient:
         self,
         enabled_value: str,
         session_token: str,
+        instance_id: str,
         extra_payload: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         return {
             **dict(extra_payload or {}),
             "IF_ACTION": "Apply",
             "Enable": enabled_value,
-            "_InstID": self.instance_id,
+            "_InstID": instance_id,
             "_sessionTOKEN": session_token,
         }
 

@@ -96,7 +96,6 @@ class ZteWifiClientTest(unittest.TestCase):
             host="http://192.168.2.1",
             username="admin",
             password="secret",
-            instance_id="DEV.WIFI.AP6",
         )
 
     def test_hash_password(self) -> None:
@@ -153,6 +152,7 @@ class ZteWifiClientTest(unittest.TestCase):
         payload = self.client._build_apply_payload(
             enabled_value="1",
             session_token="654321",
+            instance_id="DEV.WIFI.AP6",
             extra_payload={
                 "ESSID": "Guest",
                 "Enable": "0",
@@ -303,11 +303,9 @@ class ZteWifiClientRequestFlowTest(unittest.IsolatedAsyncioTestCase):
             host="http://192.168.2.1",
             username="admin",
             password="111111",
-            instance_id="DEV.WIFI.AP6",
         )
 
-        with patch("custom_components.zte_wifi.zte.time", return_value=0):
-            await client.set_enabled(False)
+        await client.set_enabled(False, "DEV.WIFI.AP6")
 
         self.assertEqual(
             [
@@ -318,12 +316,12 @@ class ZteWifiClientRequestFlowTest(unittest.IsolatedAsyncioTestCase):
                 ("GET", "/"),
                 (
                     "GET",
-                    "/function_module/login_module/login_page/logintoken_lua.lua?_=0",
+                    "/function_module/login_module/login_page/logintoken_lua.lua",
                 ),
                 ("POST", "/"),
                 (
                     "GET",
-                    "/getpage.lua?pid=123&nextpage=Localnet_WlanBasicUser_t.lp&Menu3Location=0&_=0",
+                    "/getpage.lua?pid=123&nextpage=Localnet_WlanBasicUser_t.lp&Menu3Location=0",
                 ),
                 ("POST", "/common_page/Localnet_WlanBasicAd_WLANSSIDConf_lua.lua"),
             ],
@@ -367,7 +365,6 @@ class ZteWifiClientRequestFlowTest(unittest.IsolatedAsyncioTestCase):
                 FakeResponse("<token>17007188</token>"),
                 FakeResponse("", status=302, headers={"Set-Cookie": "SID=sid-value"}),
                 FakeResponse("<ajax_response_xml_root><IF_ERRORSTR>SUCC</IF_ERRORSTR></ajax_response_xml_root>"),
-                FakeResponse("_sessionTmpToken = \"222222\";"),
                 FakeResponse(
                     """
                     <ajax_response_xml_root>
@@ -392,11 +389,9 @@ class ZteWifiClientRequestFlowTest(unittest.IsolatedAsyncioTestCase):
             host="http://192.168.2.1",
             username="admin",
             password="111111",
-            instance_id="DEV.WIFI.AP6",
         )
 
-        with patch("custom_components.zte_wifi.zte.time", return_value=0):
-            networks = await client.get_wifi_networks()
+        networks = await client.get_wifi_networks()
 
         self.assertEqual(
             [
@@ -407,30 +402,30 @@ class ZteWifiClientRequestFlowTest(unittest.IsolatedAsyncioTestCase):
                 ("GET", "/"),
                 (
                     "GET",
-                    "/function_module/login_module/login_page/logintoken_lua.lua?_=0",
+                    "/function_module/login_module/login_page/logintoken_lua.lua",
                 ),
                 ("POST", "/"),
                 (
                     "GET",
-                    "/getpage.lua?pid=1005&nextpage=home_wlanDevice_lua.lua&InstNum=5&_=0",
+                    "/getpage.lua?pid=123&nextpage=Localnet_LocalnetStatusUser_t.lp&Menu3Location=0",
                 ),
-                (
-                    "GET",
-                    "/getpage.lua?pid=123&nextpage=Localnet_LocalnetStatusUser_t.lp&Menu3Location=0&_=0",
-                ),
-                ("GET", "/common_page/wlanStatus_lua.lua?_=0"),
+                ("GET", "/common_page/wlanStatus_lua.lua"),
             ],
         )
         self.assertEqual(networks[0].instance_id, "DEV.WIFI.AP1")
         self.assertFalse(networks[0].enabled)
         self.assertEqual(networks[0].essid, "Guest")
-        self.assertEqual(session.calls[3]["headers"]["accept"], "application/xml, text/xml, */*; q=0.01")
-        self.assertEqual(session.calls[3]["headers"]["x-requested-with"], "XMLHttpRequest")
-        self.assertEqual(session.calls[4]["headers"]["accept"], "text/html, */*; q=0.01")
-        self.assertEqual(session.calls[4]["headers"]["proxy-connection"], "keep-alive")
-        self.assertEqual(session.calls[4]["headers"]["x-requested-with"], "XMLHttpRequest")
-        self.assertEqual(session.calls[5]["headers"]["x-requested-with"], "XMLHttpRequest")
-        self.assertNotIn("content-type", session.calls[5]["headers"])
+        self.assertEqual(
+            session.calls[3]["headers"]["accept"],
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        )
+        self.assertNotIn("x-requested-with", session.calls[3]["headers"])
+        self.assertEqual(
+            session.calls[4]["headers"]["accept"],
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        )
+        self.assertNotIn("x-requested-with", session.calls[4]["headers"])
+        self.assertNotIn("content-type", session.calls[4]["headers"])
 
     async def test_login_raises_router_error_when_sid_does_not_change(self) -> None:
         """Fetch and report the login page error when POST leaves SID unchanged."""
@@ -450,7 +445,6 @@ class ZteWifiClientRequestFlowTest(unittest.IsolatedAsyncioTestCase):
             host="http://192.168.2.1",
             username="admin",
             password="111111",
-            instance_id="DEV.WIFI.AP6",
         )
 
         with self.assertRaisesRegex(

@@ -15,7 +15,7 @@ from aiohttp import ClientSession, CookieJar
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from custom_components.zte_wifi.const import DEFAULT_HOST, DEFAULT_INSTANCE_ID  # noqa: E402
+from custom_components.zte_wifi.const import DEFAULT_HOST  # noqa: E402
 from custom_components.zte_wifi.errors import ZteRouterError  # noqa: E402
 from custom_components.zte_wifi.zte import ZteWifiClient  # noqa: E402
 
@@ -43,7 +43,6 @@ async def _run(args: argparse.Namespace) -> None:
             host=args.host,
             username=args.username,
             password=password,
-            instance_id=DEFAULT_INSTANCE_ID,
             diagnostics=True,
         )
         networks = await client.get_wifi_networks()

@@ -1,5 +1,5 @@
 Things to note:
-- `$CURRENT_TS` is always a newly-generated current epoch time in millis.
+- `$CURRENT_TS` is always a newly-generated current epoch time in millis. This is a mechanism to avoid browser caching and our script can ignore it.
 - We must follow the `Set-Cookie` headers.
 
 1. GET on '/' page with no cookies returns an HTML with a line:
