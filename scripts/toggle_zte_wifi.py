@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import logging
 import os
 from pathlib import Path
 import sys
 import traceback
-from typing import Any
 
 from aiohttp import ClientSession, CookieJar
 
@@ -23,17 +21,6 @@ from custom_components.zte_wifi.const import (  # noqa: E402
 )
 from custom_components.zte_wifi.errors import ZteRouterError  # noqa: E402
 from custom_components.zte_wifi.zte import ZteWifiClient  # noqa: E402
-
-
-def _load_apply_payload(value: str | None) -> dict[str, Any]:
-    if not value:
-        return {}
-
-    path = Path(value)
-    if path.exists():
-        return json.loads(path.read_text())
-
-    return json.loads(value)
 
 
 async def _run(args: argparse.Namespace) -> None:
@@ -51,7 +38,6 @@ async def _run(args: argparse.Namespace) -> None:
             host=args.host,
             username=args.username,
             password=password,
-            apply_payload=_load_apply_payload(args.apply_payload),
             dump_dir=Path(args.dump_dir) if args.dump_dir else None,
             diagnostics=True,
         )
@@ -70,10 +56,6 @@ def main() -> None:
     parser.add_argument("--instance-id", default=DEFAULT_INSTANCE_ID)
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--dump-dir")
-    parser.add_argument(
-        "--apply-payload",
-        help="JSON object or path to a JSON file with the long submit payload",
-    )
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG, format="%(levelname)s:%(name)s:%(message)s")

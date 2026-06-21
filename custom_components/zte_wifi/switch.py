@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
@@ -21,7 +22,6 @@ from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
-    CONF_APPLY_PAYLOAD,
     CONF_INSTANCE_ID,
     DEFAULT_HOST,
     DEFAULT_INSTANCE_ID,
@@ -43,7 +43,6 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Required(CONF_USERNAME): cv.string,
         vol.Required(CONF_PASSWORD): cv.string,
         vol.Optional(CONF_INSTANCE_ID, default=DEFAULT_INSTANCE_ID): cv.string,
-        vol.Optional(CONF_APPLY_PAYLOAD, default={}): dict,
     }
 )
 
@@ -74,7 +73,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up ZTE WiFi switches from a config entry."""
     router_name = entry.data[CONF_NAME]
-    client = _build_entry_client(hass, entry)
+    client = _build_client(hass, entry.data)
     coordinator = ZteWifiDataUpdateCoordinator(hass, client, router_name)
 
     try:
@@ -99,8 +98,8 @@ async def async_setup_entry(
     )
 
 
-def _build_client(hass: HomeAssistant, config: ConfigType) -> ZteWifiClient:
-    """Create a router client from platform configuration."""
+def _build_client(hass: HomeAssistant, config: Mapping[str, Any]) -> ZteWifiClient:
+    """Create a router client from integration configuration."""
     return ZteWifiClient(
         session=async_create_clientsession(
             hass,
@@ -109,20 +108,6 @@ def _build_client(hass: HomeAssistant, config: ConfigType) -> ZteWifiClient:
         host=config[CONF_HOST],
         username=config[CONF_USERNAME],
         password=config[CONF_PASSWORD],
-        apply_payload=config[CONF_APPLY_PAYLOAD],
-    )
-
-
-def _build_entry_client(hass: HomeAssistant, entry: ConfigEntry) -> ZteWifiClient:
-    """Create a router client from a config entry."""
-    return ZteWifiClient(
-        session=async_create_clientsession(
-            hass,
-            cookie_jar=CookieJar(unsafe=True),
-        ),
-        host=entry.data[CONF_HOST],
-        username=entry.data[CONF_USERNAME],
-        password=entry.data[CONF_PASSWORD],
     )
 
 

@@ -127,17 +127,6 @@ class ZteWifiClientTest(unittest.TestCase):
 
         self.assertEqual(ZteWifiClient._extract_wlan_page_token(text), "9876")
 
-    def test_extract_token_prefers_page_token(self) -> None:
-        """Prefer the temporary page token when both token forms exist."""
-        text = """
-        <script>
-        LoginFormObj.addParameter("_sessionTOKEN", "123456");
-        _sessionTmpToken = "\\x39\\x38\\x37\\x36";
-        </script>
-        """
-
-        self.assertEqual(ZteWifiClient._extract_token(text), "9876")
-
     def test_extract_login_error(self) -> None:
         """Extract login errors from the rendered login page script."""
         text = "<script>var login_err_msg = 'Password is incorrect';</script>"
@@ -145,30 +134,6 @@ class ZteWifiClientTest(unittest.TestCase):
         self.assertEqual(
             ZteWifiClient._extract_login_error(text),
             "Password is incorrect",
-        )
-
-    def test_build_apply_payload_merges_router_fields_last(self) -> None:
-        """Always overwrite dynamic router fields in the apply payload."""
-        payload = self.client._build_apply_payload(
-            enabled_value="1",
-            session_token="654321",
-            instance_id="DEV.WIFI.AP6",
-            extra_payload={
-                "ESSID": "Guest",
-                "Enable": "0",
-                "_sessionTOKEN": "stale",
-            },
-        )
-
-        self.assertEqual(
-            payload,
-            {
-                "ESSID": "Guest",
-                "IF_ACTION": "Apply",
-                "Enable": "1",
-                "_InstID": "DEV.WIFI.AP6",
-                "_sessionTOKEN": "654321",
-            },
         )
 
     def test_print_diagnostics_prints_to_stdout_when_enabled(self) -> None:

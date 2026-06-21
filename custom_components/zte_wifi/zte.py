@@ -82,7 +82,6 @@ class ZteWifiClient:
     host: str
     username: str
     password: str
-    apply_payload: Mapping[str, Any] = field(default_factory=dict)
     dump_dir: Path | None = None
     diagnostics: bool = False
 
@@ -110,28 +109,16 @@ class ZteWifiClient:
             raise ZteRouterError("Could not find _sessionTmpToken on WLAN page")
 
         value = "1" if enabled else "0"
-        text = await self._post(
+        await self._post(
             _WLAN_AP_PATH,
-            self._build_apply_payload(
-                value,
-                wlan_page_token,
-                instance_id=instance_id,
-            ),
+            {
+                "IF_ACTION": "Apply",
+                "Enable": value,
+                "_InstID": instance_id,
+                "_sessionTOKEN": wlan_page_token,
+            },
             _AJAX_HEADERS,
         )
-        wlan_page_token = self._extract_wlan_page_token(text) or wlan_page_token
-
-        if self.apply_payload:
-            await self._post(
-                _WLAN_AP_PATH,
-                self._build_apply_payload(
-                    value,
-                    wlan_page_token,
-                    self.apply_payload,
-                    instance_id=instance_id,
-                ),
-                _AJAX_HEADERS,
-            )
 
     async def _login(self) -> None:
         self.session.cookie_jar.clear()
@@ -280,21 +267,6 @@ class ZteWifiClient:
             return None
         return cookies["SID"].value
 
-    def _build_apply_payload(
-        self,
-        enabled_value: str,
-        session_token: str,
-        instance_id: str,
-        extra_payload: Mapping[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        return {
-            **dict(extra_payload or {}),
-            "IF_ACTION": "Apply",
-            "Enable": enabled_value,
-            "_InstID": instance_id,
-            "_sessionTOKEN": session_token,
-        }
-
     def _print_diagnostics(
         self,
         method: str,
@@ -413,10 +385,6 @@ class ZteWifiClient:
         if tmp_tokens := _WLAN_PAGE_TOKEN_PATTERN.findall(text):
             return ZteWifiClient._decode_js_token(tmp_tokens[-1])
         return None
-
-    @classmethod
-    def _extract_token(cls, text: str) -> str | None:
-        return cls._extract_wlan_page_token(text) or cls._extract_login_form_token(text)
 
     @staticmethod
     def _decode_js_token(value: str) -> str:
