@@ -72,12 +72,12 @@ def main() -> None:
     parser.add_argument("--host", default=DEFAULT_HOST)
     parser.add_argument("--username", default="admin")
     parser.add_argument("--password")
+    parser.add_argument("--debug", action="store_true")
     parser.add_argument("--prompt-password", action="store_true")
     args = parser.parse_args()
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(levelname)s:%(name)s:%(message)s",
-    )
+
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG, format="%(levelname)s:%(name)s:%(message)s")
 
     try:
         asyncio.run(_run(args))
