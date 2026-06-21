@@ -7,6 +7,7 @@ from unittest.mock import patch
 from typing import Any
 
 from aiohttp import CookieJar
+from custom_components.zte_wifi.errors import ZteRouterError
 from custom_components.zte_wifi.network import parse_wlan_status
 from custom_components.zte_wifi.zte import ZteWifiClient
 from yarl import URL
@@ -137,6 +138,15 @@ class ZteWifiClientTest(unittest.TestCase):
         """
 
         self.assertEqual(ZteWifiClient._extract_token(text), "9876")
+
+    def test_extract_login_error(self) -> None:
+        """Extract login errors from the rendered login page script."""
+        text = "<script>var login_err_msg = 'Password is incorrect';</script>"
+
+        self.assertEqual(
+            ZteWifiClient._extract_login_error(text),
+            "Password is incorrect",
+        )
 
     def test_build_apply_payload_merges_router_fields_last(self) -> None:
         """Always overwrite dynamic router fields in the apply payload."""
@@ -421,6 +431,49 @@ class ZteWifiClientRequestFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(session.calls[4]["headers"]["x-requested-with"], "XMLHttpRequest")
         self.assertEqual(session.calls[5]["headers"]["x-requested-with"], "XMLHttpRequest")
         self.assertNotIn("content-type", session.calls[5]["headers"])
+
+    async def test_login_raises_router_error_when_sid_does_not_change(self) -> None:
+        """Fetch and report the login page error when POST leaves SID unchanged."""
+        session = FakeSession(
+            [
+                FakeResponse(
+                    'LoginFormObj.addParameter("_sessionTOKEN", "111111");',
+                    headers={"Set-Cookie": "SID=stale-sid"},
+                ),
+                FakeResponse("<token>17007188</token>"),
+                FakeResponse("", status=302, headers={"Set-Cookie": "SID=stale-sid"}),
+                FakeResponse("<script>var login_err_msg = 'Password is incorrect';</script>"),
+            ]
+        )
+        client = ZteWifiClient(
+            session=session,  # type: ignore[arg-type]
+            host="http://192.168.2.1",
+            username="admin",
+            password="111111",
+            instance_id="DEV.WIFI.AP6",
+        )
+
+        with self.assertRaisesRegex(
+            ZteRouterError,
+            "Router login failed: Password is incorrect",
+        ):
+            await client.get_wifi_networks()
+
+        self.assertEqual(
+            [
+                (call["method"], call["url"].split("192.168.2.1", 1)[1])
+                for call in session.calls
+            ],
+            [
+                ("GET", "/"),
+                (
+                    "GET",
+                    "/function_module/login_module/login_page/logintoken_lua.lua",
+                ),
+                ("POST", "/"),
+                ("GET", "/"),
+            ],
+        )
 
 
 if __name__ == "__main__":

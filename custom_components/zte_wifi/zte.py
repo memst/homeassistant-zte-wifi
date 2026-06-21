@@ -145,9 +145,16 @@ class ZteWifiClient:
             "action": "login",
             "_sessionTOKEN": login_form_token,
         }
+        sid_before_login = self._sid_cookie()
         await self._post("/", payload, _LOGIN_HEADERS, allow_redirects=False)
-        if "SID" not in self.session.cookie_jar.filter_cookies(URL(self._url("/"))):
+        sid_after_login = self._sid_cookie()
+        if not sid_after_login:
             raise ZteRouterError("Router login did not return a SID cookie")
+        if sid_after_login == sid_before_login:
+            login_page = await self._get("/")
+            if login_error := self._extract_login_error(login_page):
+                raise ZteRouterError(f"Router login failed: {login_error}")
+            raise ZteRouterError("Router login did not update the SID cookie")
 
     async def _get(
         self,
@@ -250,6 +257,12 @@ class ZteWifiClient:
             return ""
         return cookies.output(header="", sep=";").strip()
 
+    def _sid_cookie(self) -> str | None:
+        cookies = self.session.cookie_jar.filter_cookies(URL(self._url("/")))
+        if "SID" not in cookies:
+            return None
+        return cookies["SID"].value
+
     def _build_apply_payload(
         self,
         enabled_value: str,
@@ -333,9 +346,9 @@ class ZteWifiClient:
                 if found is not None and found.text is not None:
                     parts[name] = found.text.strip()
 
-        login_error = re.search(r"var login_err_msg = [\"']([^\"']*)[\"']", text)
+        login_error = cls._extract_login_error(text)
         if login_error:
-            parts["login_err_msg"] = cls._decode_js_token(login_error.group(1))
+            parts["login_err_msg"] = login_error
 
         now_status = re.search(r"var NowStatus = [\"']([^\"']*)[\"']", text)
         if now_status:
@@ -395,6 +408,13 @@ class ZteWifiClient:
         return "".join(
             chr(int(match, 16)) for match in re.findall(r"\\x([0-9a-fA-F]{2})", value)
         )
+
+    @classmethod
+    def _extract_login_error(cls, text: str) -> str | None:
+        match = re.search(r"var\s+login_err_msg\s*=\s*([\"'])(.*?)\1", text)
+        if not match:
+            return None
+        return cls._decode_js_token(match.group(2))
 
     @staticmethod
     def _is_login_page(text: str) -> bool:
