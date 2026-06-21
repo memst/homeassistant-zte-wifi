@@ -19,15 +19,9 @@ from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from .const import (
     CONF_APPLY_PAYLOAD,
     CONF_INSTANCE_ID,
-    CONF_LOGIN_TOKEN_PATH,
-    CONF_PAGE_PATH,
-    CONF_PATH,
     DEFAULT_HOST,
     DEFAULT_INSTANCE_ID,
-    DEFAULT_LOGIN_TOKEN_PATH,
     DEFAULT_NAME,
-    DEFAULT_PAGE_PATH,
-    DEFAULT_PATH,
     DOMAIN,
 )
 from .zte import ZteRouterError, ZteWifiClient
@@ -41,11 +35,6 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Required(CONF_USERNAME): cv.string,
         vol.Required(CONF_PASSWORD): cv.string,
         vol.Optional(CONF_INSTANCE_ID, default=DEFAULT_INSTANCE_ID): cv.string,
-        vol.Optional(CONF_PATH, default=DEFAULT_PATH): cv.string,
-        vol.Optional(CONF_PAGE_PATH, default=DEFAULT_PAGE_PATH): cv.string,
-        vol.Optional(
-            CONF_LOGIN_TOKEN_PATH, default=DEFAULT_LOGIN_TOKEN_PATH
-        ): cv.string,
         vol.Optional(CONF_APPLY_PAYLOAD, default={}): dict,
     }
 )
@@ -58,18 +47,20 @@ async def async_setup_platform(
     discovery_info: DiscoveryInfoType | None = None,
 ) -> None:
     """Set up the ZTE WiFi switch from YAML."""
-    client = ZteWifiClient(
+    client = _build_client(hass, config)
+    async_add_entities([ZteWifiSwitch(config[CONF_NAME], client)])
+
+
+def _build_client(hass: HomeAssistant, config: ConfigType) -> ZteWifiClient:
+    """Create a router client from platform configuration."""
+    return ZteWifiClient(
         session=async_get_clientsession(hass),
         host=config[CONF_HOST],
         username=config[CONF_USERNAME],
         password=config[CONF_PASSWORD],
         instance_id=config[CONF_INSTANCE_ID],
-        path=config[CONF_PATH],
-        page_path=config[CONF_PAGE_PATH],
-        login_token_path=config[CONF_LOGIN_TOKEN_PATH],
         apply_payload=config[CONF_APPLY_PAYLOAD],
     )
-    async_add_entities([ZteWifiSwitch(config[CONF_NAME], client)])
 
 
 class ZteWifiSwitch(SwitchEntity):
@@ -82,12 +73,17 @@ class ZteWifiSwitch(SwitchEntity):
     def __init__(self, name: str, client: ZteWifiClient) -> None:
         """Initialize the switch."""
         self._attr_name = name
-        self._attr_unique_id = f"{DOMAIN}_{client.host}_{client.instance_id}".replace(
-            "://", "_"
-        ).replace("/", "_")
+        self._attr_unique_id = self._build_unique_id(client)
         self._attr_is_on: bool | None = None
         self._attr_available = True
         self._client = client
+
+    @staticmethod
+    def _build_unique_id(client: ZteWifiClient) -> str:
+        """Build a stable unique ID from the router target."""
+        return f"{DOMAIN}_{client.host}_{client.instance_id}".replace(
+            "://", "_"
+        ).replace("/", "_")
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the AP."""

@@ -9,6 +9,7 @@ import logging
 import os
 from pathlib import Path
 import sys
+import traceback
 from typing import Any
 
 from aiohttp import ClientSession
@@ -19,8 +20,6 @@ sys.path.insert(0, str(ROOT))
 from custom_components.zte_wifi.const import (
     DEFAULT_HOST,
     DEFAULT_INSTANCE_ID,
-    DEFAULT_LOGIN_TOKEN_PATH,
-    DEFAULT_PAGE_PATH,
 )
 from custom_components.zte_wifi.zte import ZteWifiClient, ZteRouterError
 
@@ -52,8 +51,6 @@ async def _run(args: argparse.Namespace) -> None:
             username=args.username,
             password=password,
             instance_id=args.instance_id,
-            page_path=args.page_path,
-            login_token_path=args.login_token_path,
             apply_payload=_load_apply_payload(args.apply_payload),
             dump_dir=Path(args.dump_dir) if args.dump_dir else None,
             diagnostics=True,
@@ -71,8 +68,6 @@ def main() -> None:
     parser.add_argument("--password")
     parser.add_argument("--prompt-password", action="store_true")
     parser.add_argument("--instance-id", default=DEFAULT_INSTANCE_ID)
-    parser.add_argument("--page-path", default=DEFAULT_PAGE_PATH)
-    parser.add_argument("--login-token-path", default=DEFAULT_LOGIN_TOKEN_PATH)
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--dump-dir")
     parser.add_argument(
@@ -86,6 +81,7 @@ def main() -> None:
     try:
         asyncio.run(_run(args))
     except ZteRouterError as err:
+        traceback.print_exc()
         raise SystemExit(f"Router request failed: {err}") from err
 
 

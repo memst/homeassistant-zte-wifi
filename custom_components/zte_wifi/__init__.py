@@ -1,3 +1,5 @@
 """ZTE WiFi custom integration."""
 
-DOMAIN = "zte_wifi"
+from .const import DOMAIN
+
+__all__ = ["DOMAIN"]

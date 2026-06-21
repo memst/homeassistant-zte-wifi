@@ -61,6 +61,9 @@ integration automatically adds `IF_ACTION`, `Enable`, `_InstID`, and
 
 If your router accepts the short request only, omit `apply_payload`.
 
+The integration only exposes `host`, `name`, `username`, `password`, and
+`instance_id` as configuration. The router page paths are internal details.
+
 ## Test locally
 
 The fastest pre-deploy test is to call the router client directly from this
@@ -110,11 +113,3 @@ entity to Assist/voice assistants and say things like:
 
 The switch is optimistic and does not poll the router. That keeps it lightweight,
 but the displayed state only reflects the last command sent by Home Assistant.
-
-## Options
-
-```yaml
-path: /common_page/Localnet_WlanBasicAd_WLANSSIDConf_lua.lua
-page_path: /getpage.lua?pid=123&nextpage=Localnet_WlanBasicAd_t.lp
-login_token_path: /function_module/login_module/login_page/logintoken_lua.lua
-```
