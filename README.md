@@ -1,5 +1,12 @@
 # ZTE WiFi Home Assistant integration
 
+This is a Home Assistant integration that lets users turn on and off APs inside ZTE ZXHN H298A router (a router used by Hyperoptic ISP).
+
+I am willing to accept PRs to this repository but do not plan on actively maintaining it.
+
+> [!WARNING]
+> This integration is mostly vibe-coded and not feature-rich, even though I have read and verified all the non-test-file code. Please feel free to use this as a starting point for figuring out how to interact with the router's web-ui. The rest of the text in this readme is AI-generated with minimal review.
+
 Tiny custom integration that exposes one Home Assistant `switch` for a ZTE
 router WLAN AP instance, such as `DEV.WIFI.AP6`.
 
