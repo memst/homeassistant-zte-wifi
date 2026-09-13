@@ -1,10 +1,12 @@
 {
   "domain": "zte_wifi",
-  "name": "ZTE WiFi",
-  "codeowners": [],
+  "name": "ZTE WiFi (ZXHN H298A)",
+  "codeowners": ["@memst"],
   "config_flow": true,
+  "documentation": "https://github.com/memst/homeassistant-zte-wifi",
   "integration_type": "hub",
   "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/memst/homeassistant-zte-wifi/issues",
   "requirements": [],
   "version": "0.1.0"
 }
