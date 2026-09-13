@@ -24,6 +24,15 @@ That is why the browser's `Password` value changes on every login.
 
 ## Install
 
+### HACS (recommended)
+
+1. In HACS, open the menu (⋮) → **Custom repositories**.
+2. Add `https://github.com/memst/homeassistant-zte-wifi` with type **Integration**.
+3. Search for **ZTE WiFi (ZXHN H298A)** in HACS and install it.
+4. Restart Home Assistant.
+
+### Manual
+
 Copy the integration folder into Home Assistant as:
 
 ```text
@@ -34,7 +43,10 @@ Then restart Home Assistant.
 
 ## Configure
 
-Add this to `configuration.yaml`:
+The integration supports the UI config flow: go to **Settings → Devices &
+services → Add integration** and search for **ZTE WiFi (ZXHN H298A)**.
+
+Alternatively, add this to `configuration.yaml`:
 
 ```yaml
 switch:
