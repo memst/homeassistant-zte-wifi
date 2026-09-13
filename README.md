@@ -28,6 +28,7 @@ That is why the browser's `Password` value changes on every login.
 
 1. Make sure you have HACS installed in Home Assistant by following [User documentation - HACS](https://www.hacs.xyz/docs/use/#getting-started-with-hacs).
 2. Click the button below and follow the instructions or search for **ZTE WiFi (ZXHN H298A)** in the HACS tab of your Home Assistant.
+
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=memst&repository=homeassistant-zte-wifi)
 
 ### Manual
